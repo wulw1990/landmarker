@@ -1,0 +1,12 @@
+# editor
+*~
+*.orig
+*.swp
+*.pyc
+.vscode
+*.o
+*.out
+*.log
+
+# build
+build/*
