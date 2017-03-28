@@ -1,20 +1,16 @@
 #include <iostream>
-#include <string>
 #include <set>
-#include "opencv2/opencv.hpp"
+#include <string>
+#include "labeler.hpp"
 #include "python.hpp"
 using namespace std;
-using namespace cv;
 
 void Help() {
-  cout << "Two parameter needed:" << endl;
-  cout << "  1) image folder" << endl;
-  cout << "  2) label folder" << endl;
+  cout << "Three parameter needed:" << endl;
+  cout << "  1) mode" << endl;
+  cout << "  2) image folder" << endl;
+  cout << "  3) label folder" << endl;
 }
-
-static const int kWindowWidth = 1700;
-static const int kWindowHeight = 900;
-
 vector<string> FiltSuffix(const vector<string>& src,
                           const set<string>& suffix) {
   vector<string> dst;
@@ -42,43 +38,36 @@ vector<string> GetUnlabeledImageList(const vector<string>& list_image,
   }
   return list_unlabeled;
 }
+vector<string> GetLabeledImageList(const vector<string>& list_image,
+                                   const vector<string>& list_label) {
+  set<string> set_label;
+  for (size_t i = 0; i < list_label.size(); ++i) {
+    set_label.insert(list_label[i]);
+  }
+  vector<string> list_labeled;
+  for (size_t i = 0; i < list_image.size(); ++i) {
+    string name = list_image[i] + ".txt";
+    if (set_label.find(name) != set_label.end()) {
+      list_labeled.push_back(list_image[i]);
+    }
+  }
+  return list_labeled;
+}
 void PrintList(const vector<string>& list, string name) {
   cout << name << ": " << list.size() << endl;
   for (size_t i = 0; i < list.size(); ++i) {
     cout << "  " << i << "/" << list.size() << ": " << list[i] << endl;
   }
 }
-void Label(string image_name, string label_name) {  //
-  cout << "Label" << endl;
-  Mat img = imread(image_name);
-  if (image_name.empty()) {
-    cerr << "image read failed: " << image_name << endl;
-    exit(-1);
-  }
 
-  // resize img for window
-  double scale = 1.0;
-  if (img.cols > kWindowWidth) {
-    double tmp = (double)kWindowWidth / img.cols;
-    scale *= tmp;
-    resize(img, img, Size(img.cols * tmp, img.rows * tmp));
-  }
-  if (img.rows > kWindowHeight) {
-    double tmp = (double)kWindowHeight / img.rows;
-    scale *= tmp;
-    resize(img, img, Size(img.cols * tmp, img.rows * tmp));
-  }
-
-  imshow("Label", img);
-  waitKey(0);
-}
 int main(int argc, char** argv) {
-  if (argc != 3) {
+  if (argc != 4) {
     Help();
     return -1;
   }
-  string path_image(argv[1]);
-  string path_label(argv[2]);
+  string mode(argv[1]);
+  string path_image(argv[2]);
+  string path_label(argv[3]);
   cout << "path_image: " << path_image << endl;
   cout << "path_label: " << path_label << endl;
 
@@ -99,17 +88,32 @@ int main(int argc, char** argv) {
   list_image = FiltSuffix(list_image, suffix_image);
   list_label = FiltSuffix(list_label, suffix_label);
   vector<string> list_unlabeled = GetUnlabeledImageList(list_image, list_label);
+  vector<string> list_labeled = GetLabeledImageList(list_image, list_label);
 
   PrintList(list_image, "list_image");
   PrintList(list_label, "list_label");
   PrintList(list_unlabeled, "list_unlabeled");
 
-  cout << "labeling" << endl;
-  python::makedirs(path_label);
-  for (size_t i = 0; i < list_unlabeled.size(); ++i) {
-    cout << "  labeling " << i << "/" << list_unlabeled.size() << ": "
-         << list_unlabeled[i] << endl;
-    Label(path_image + "/" + list_unlabeled[i],
-          path_label + "/" + list_unlabeled[i] + ".txt");
+  if (mode == "label") {
+    if (list_unlabeled.empty()) return 0;
+    cout << "labeling" << endl;
+    python::makedirs(path_label);
+    for (size_t i = 0; i < list_unlabeled.size(); ++i) {
+      cout << "  labeling " << i << "/" << list_unlabeled.size() << ": "
+           << list_unlabeled[i] << endl;
+      Label(path_image + "/" + list_unlabeled[i],
+            path_label + "/" + list_unlabeled[i] + ".txt");
+    }
+  } else if (mode == "check") {
+    cout << "checking" << endl;
+    for (size_t i = 0; i < list_labeled.size(); ++i) {
+      cout << "  checking " << i << "/" << list_labeled.size() << ": "
+           << list_labeled[i] << endl;
+      Check(path_image + "/" + list_labeled[i],
+            path_label + "/" + list_labeled[i] + ".txt");
+    }
+  } else {
+    cerr << "error mode: " << mode << endl;
+    return -1;
   }
 }
