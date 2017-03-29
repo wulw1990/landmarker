@@ -152,11 +152,9 @@ vector<Point2i> Labeler::GetLandmarkFromUI(const Mat& origin, Rect rect) {
   Mat roi = origin(rect).clone();
 
   double scale = 1.0;
-  if (roi.cols < kWindowWidth || roi.rows < kWindowHeight) {
-    scale =
+  scale =
         min((double)kWindowWidth / roi.cols, (double)kWindowHeight / roi.rows);
-    resize(roi, roi, Size(roi.cols * scale, roi.rows * scale));
-  }
+  resize(roi, roi, Size(roi.cols * scale, roi.rows * scale));
 
   LandmarkData landmark_data;
   landmark_data.img = roi.clone();
