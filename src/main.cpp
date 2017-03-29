@@ -101,15 +101,16 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < list_unlabeled.size(); ++i) {
       cout << "  labeling " << i << "/" << list_unlabeled.size() << ": "
            << list_unlabeled[i] << endl;
-      Label(path_image + "/" + list_unlabeled[i],
+      Labeler::Label(path_image + "/" + list_unlabeled[i],
             path_label + "/" + list_unlabeled[i] + ".txt");
     }
   } else if (mode == "check") {
+    if (list_labeled.empty()) return 0;
     cout << "checking" << endl;
     for (size_t i = 0; i < list_labeled.size(); ++i) {
       cout << "  checking " << i << "/" << list_labeled.size() << ": "
            << list_labeled[i] << endl;
-      Check(path_image + "/" + list_labeled[i],
+      Labeler::Check(path_image + "/" + list_labeled[i],
             path_label + "/" + list_labeled[i] + ".txt");
     }
   } else {

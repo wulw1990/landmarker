@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <vector>
 #include "opencv2/opencv.hpp"
 using namespace cv;
@@ -10,18 +11,46 @@ using namespace std;
 static const int kWindowWidth = 1700;
 static const int kWindowHeight = 900;
 static const char* kWindowName = "Labeler";
-static const int kLandmarkSize = 4;
+static const int kLandmarkSize = 8;
 
-struct RectData {
-  Mat img;
-  Rect rect;
-  bool ok;
-  RectData() {
-    rect = Rect(0, 0, 0, 0);
-    ok = false;
+// Label -----------------------------------------------------------------------
+void Labeler::Label(string image_name, string label_name) {  //
+  Mat origin = imread(image_name);
+  if (image_name.empty()) {
+    cerr << "image read failed: " << image_name << endl;
+    exit(-1);
   }
-};
-void OnMouseRect(int event, int x, int y, int, void* data) {
+
+  Rect rect = GetRectFromUI(origin);
+  cout << "    GetRectFromUI OK" << endl;
+
+  vector<Point2i> landmark = GetLandmarkFromUI(origin, rect);
+  cout << "    GetLandmarkFromUI OK" << endl;
+
+  SaveLandmark(label_name, landmark, rect);
+  cout << "    Save Label File OK" << endl;
+
+  destroyAllWindows();
+  ShowResultLandmark(origin, landmark, rect);
+}
+
+// Check -----------------------------------------------------------------------
+void Labeler::Check(std::string image_name, std::string label_name) {
+  Mat origin = imread(image_name);
+  if (image_name.empty()) {
+    cerr << "image read failed: " << image_name << endl;
+    exit(-1);
+  }
+
+  vector<Point2i> landmark;
+  Rect rect;
+  LoadLandmark(label_name, &landmark, &rect);
+
+  ShowResultLandmark(origin, landmark, rect);
+}
+
+// UI: get rect ----------------------------------------------------------------
+void Labeler::OnMouseRect(int event, int x, int y, int, void* data) {
   RectData* p = (RectData*)data;
   Mat mat;
   switch (event) {
@@ -45,32 +74,10 @@ void OnMouseRect(int event, int x, int y, int, void* data) {
       p->rect.width = x - p->rect.x + 1;
       p->rect.height = y - p->rect.y + 1;
       p->ok = true;
-  }
-}
-struct LandmarkData {
-  Mat img;
-  vector<Point2i> landmark;
-};
-void DrawLandmark(Mat img, vector<Point2i> landmark) {
-  for (size_t i = 0; i < landmark.size(); ++i) {
-    circle(img, landmark[i], 3, Scalar(255, 0, 0), -1);
-  }
-}
-void OnMouseLandmark(int event, int x, int y, int, void* data) {
-  LandmarkData* p = (LandmarkData*)data;
-  Mat mat;
-  switch (event) {
-    case EVENT_LBUTTONDOWN:
-      p->landmark.push_back(Point2i(x, y));
-      cout << "    Add point: " << p->landmark[p->landmark.size() - 1]
-           << ", size=" << p->landmark.size() << endl;
-      mat = p->img.clone();
-      DrawLandmark(mat, p->landmark);
-      imshow(kWindowName, mat);
       break;
   }
 }
-Rect GetRect(Mat origin) {
+Rect Labeler::GetRectFromUI(const Mat& origin) {
   // resize img for window
   Mat img = origin.clone();
   double scale = 1.0;
@@ -101,7 +108,47 @@ Rect GetRect(Mat origin) {
   }
   return rect;
 }
-vector<Point2i> GetLandmark(Mat origin, Rect rect) {
+// UI: get landmark ------------------------------------------------------------
+void Labeler::DrawLandmarkWithIndex(Mat img, vector<Point2i> landmark) {
+  for (size_t i = 0; i < landmark.size(); ++i) {
+    circle(img, landmark[i], 3, Scalar(0, 0, 255), -1);
+    stringstream ss;
+    ss << i % 4;
+    putText(img, ss.str(), landmark[i], CV_FONT_HERSHEY_COMPLEX, 1,
+            Scalar(255, 0, 0));
+  }
+  for (size_t i = 0; i < landmark.size() / 4; ++i) {
+    int x = 0;
+    int y = 0;
+    for (int j = 0; j < 4; ++j) {
+      x += landmark[i * 4 + j].x;
+      y += landmark[i * 4 + j].y;
+    }
+    x /= 4;
+    y /= 4;
+    stringstream ss;
+    ss << i;
+    putText(img, ss.str(), Point2i(x, y), CV_FONT_HERSHEY_COMPLEX, 1,
+            Scalar(0, 0, 244));
+  }
+}
+void Labeler::OnMouseLandmark(int event, int x, int y, int, void* data) {
+  if (event != EVENT_LBUTTONDOWN && event != EVENT_MOUSEMOVE) return;
+  LandmarkData* p = (LandmarkData*)data;
+  switch (event) {
+    case EVENT_LBUTTONDOWN:
+      p->landmark.push_back(Point2i(x, y));
+      cout << "    Add point: " << p->landmark[p->landmark.size() - 1]
+           << ", size=" << p->landmark.size() << endl;
+      break;
+  }
+  Mat mat = p->img.clone();
+  line(mat, Point2f(0, y), Point2f(mat.cols - 1, y), Scalar(127, 127, 127), 1);
+  line(mat, Point2f(x, 0), Point2f(x, mat.rows - 1), Scalar(127, 127, 127), 1);
+  DrawLandmarkWithIndex(mat, p->landmark);
+  imshow(kWindowName, mat);
+}
+vector<Point2i> Labeler::GetLandmarkFromUI(const Mat& origin, Rect rect) {
   Mat roi = origin(rect).clone();
 
   double scale = 1.0;
@@ -130,7 +177,8 @@ vector<Point2i> GetLandmark(Mat origin, Rect rect) {
   }
   return landmark_data.landmark;
 }
-void ShowResult(Mat origin, vector<Point2i> landmark) {
+void Labeler::ShowResultLandmark(const Mat& origin, vector<Point2i> landmark,
+                                 Rect rect) {
   Mat img = origin.clone();
   double scale = 1.0;
   if (img.cols > kWindowWidth || img.rows > kWindowHeight) {
@@ -139,51 +187,61 @@ void ShowResult(Mat origin, vector<Point2i> landmark) {
     resize(img, img, Size(img.cols * scale, img.rows * scale));
   }
   for (size_t i = 0; i < landmark.size(); ++i) {
-    circle(img, Point2f(landmark[i].x * scale, landmark[i].y * scale), 3,
-           Scalar(255, 0, 0), -1);
+    landmark[i].x = scale * landmark[i].x;
+    landmark[i].y = scale * landmark[i].y;
   }
-  imshow(kWindowName, img);
+  for (size_t i = 0; i < landmark.size(); ++i) {
+    circle(img, landmark[i], 3, Scalar(0, 0, 255), -1);
+  }
+  imshow("Global", img);
+  waitKey(33);
+
+  Mat crop = origin(rect).clone();
+  for (size_t i = 0; i < landmark.size(); ++i) {
+    landmark[i].x = 1 / scale * landmark[i].x - rect.x;
+    landmark[i].y = 1 / scale * landmark[i].y - rect.y;
+  }
+  DrawLandmarkWithIndex(crop, landmark);
+  imshow("Local", crop);
   waitKey(0);
 }
-void Label(string image_name, string label_name) {  //
-  Mat origin = imread(image_name);
-  if (image_name.empty()) {
-    cerr << "image read failed: " << image_name << endl;
-    exit(-1);
-  }
 
-  Rect rect = GetRect(origin);
-  vector<Point2i> landmark = GetLandmark(origin, rect);
-  ShowResult(origin, landmark);
-
-  ofstream fout(label_name.c_str());
+void Labeler::SaveLandmark(std::string name,
+                           const std::vector<cv::Point2i>& landmark,
+                           const cv::Rect& rect) {
+  ofstream fout(name.c_str());
   if (!fout.is_open()) {
-    cerr << "can not write: " << label_name << endl;
+    cerr << "can not write: " << name << endl;
     exit(-1);
   }
+  fout << rect.x << " " << rect.y << " " << rect.width << " " << rect.height
+       << endl;
   fout << landmark.size() << endl;
   for (size_t i = 0; i < landmark.size(); ++i) {
     fout << landmark[i].x << " " << landmark[i].y << endl;
   }
+  fout << "OK" << endl;
 }
-void Check(std::string image_name, std::string label_name) {
-  Mat origin = imread(image_name);
-  if (image_name.empty()) {
-    cerr << "image read failed: " << image_name << endl;
-    exit(-1);
-  }
-
-  vector<Point2i> landmark;
+void Labeler::LoadLandmark(std::string name,
+                           std::vector<cv::Point2i>* landmark_,
+                           cv::Rect* rect) {
+  std::vector<cv::Point2i>& landmark = *landmark_;
   int num;
-  ifstream fin(label_name.c_str());
+  ifstream fin(name.c_str());
   if (!fin.is_open()) {
-    cerr << "can not read: " << label_name << endl;
+    cerr << "can not read: " << name << endl;
     exit(-1);
   }
+  fin >> rect->x >> rect->y >> rect->width >> rect->height;
   fin >> num;
   landmark.resize(num);
   for (size_t i = 0; i < landmark.size(); ++i) {
     fin >> landmark[i].x >> landmark[i].y;
   }
-  ShowResult(origin, landmark);
+  string ok;
+  fin >> ok;
+  if (ok != "OK") {
+    cerr << "label file error: " << name << endl;
+    exit(-1);
+  }
 }
