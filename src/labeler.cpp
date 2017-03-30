@@ -153,7 +153,7 @@ vector<Point2i> Labeler::GetLandmarkFromUI(const Mat& origin, Rect rect) {
 
   double scale = 1.0;
   scale =
-        min((double)kWindowWidth / roi.cols, (double)kWindowHeight / roi.rows);
+      min((double)kWindowWidth / roi.cols, (double)kWindowHeight / roi.rows);
   resize(roi, roi, Size(roi.cols * scale, roi.rows * scale));
 
   LandmarkData landmark_data;
@@ -175,33 +175,42 @@ vector<Point2i> Labeler::GetLandmarkFromUI(const Mat& origin, Rect rect) {
   }
   return landmark_data.landmark;
 }
-void Labeler::ShowResultLandmark(const Mat& origin, vector<Point2i> landmark,
+void Labeler::ShowResultLandmark(const Mat& origin_, vector<Point2i> landmark_,
                                  Rect rect) {
-  Mat img = origin.clone();
-  double scale = 1.0;
-  if (img.cols > kWindowWidth || img.rows > kWindowHeight) {
-    scale =
+  {
+    Mat img = origin_.clone();
+    double scale =
         min((double)kWindowWidth / img.cols, (double)kWindowHeight / img.rows);
     resize(img, img, Size(img.cols * scale, img.rows * scale));
+    vector<Point2i> landmark = landmark_;
+    for (size_t i = 0; i < landmark.size(); ++i) {
+      landmark[i].x = scale * landmark[i].x;
+      landmark[i].y = scale * landmark[i].y;
+    }
+    for (size_t i = 0; i < landmark.size(); ++i) {
+      circle(img, landmark[i], 3, Scalar(0, 0, 255), -1);
+    }
+    imshow("Global", img);
+    waitKey(33);
   }
-  for (size_t i = 0; i < landmark.size(); ++i) {
-    landmark[i].x = scale * landmark[i].x;
-    landmark[i].y = scale * landmark[i].y;
+  {
+    Mat crop = origin_(rect).clone();
+    vector<Point2i> landmark = landmark_;
+    for (size_t i = 0; i < landmark.size(); ++i) {
+      landmark[i].x -= rect.x;
+      landmark[i].y -= rect.y;
+    }
+    double scale = min((double)kWindowWidth / crop.cols,
+                       (double)kWindowHeight / crop.rows);
+    resize(crop, crop, Size(crop.cols * scale, crop.rows * scale));
+    for (size_t i = 0; i < landmark.size(); ++i) {
+      landmark[i].x = scale * landmark[i].x;
+      landmark[i].y = scale * landmark[i].y;
+    }
+    DrawLandmarkWithIndex(crop, landmark);
+    imshow("Local", crop);
+    waitKey(0);
   }
-  for (size_t i = 0; i < landmark.size(); ++i) {
-    circle(img, landmark[i], 3, Scalar(0, 0, 255), -1);
-  }
-  imshow("Global", img);
-  waitKey(33);
-
-  Mat crop = origin(rect).clone();
-  for (size_t i = 0; i < landmark.size(); ++i) {
-    landmark[i].x = 1 / scale * landmark[i].x - rect.x;
-    landmark[i].y = 1 / scale * landmark[i].y - rect.y;
-  }
-  DrawLandmarkWithIndex(crop, landmark);
-  imshow("Local", crop);
-  waitKey(0);
 }
 
 void Labeler::SaveLandmark(std::string name,
